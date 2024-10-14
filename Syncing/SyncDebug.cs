@@ -9,17 +9,19 @@ namespace DeveloperSample.Syncing
 {
     public class SyncDebug
     {
+        private static bool _isBusyUpdating = false;
+
         public List<string> InitializeList(IEnumerable<string> items)
         {
             var bag = new ConcurrentBag<string>();
-            Parallel.ForEach(items, async i =>
+            foreach (var i in items)
             {
-                var r = await Task.Run(() => i).ConfigureAwait(false);
+                var r = Task.Run(() => i).GetAwaiter().GetResult();
                 bag.Add(r);
-            });
-            var list = bag.ToList();
-            return list;
+            }
+            return bag.ToList();
         }
+
 
         public Dictionary<int, string> InitializeDictionary(Func<int, string> getItem)
         {
@@ -27,10 +29,19 @@ namespace DeveloperSample.Syncing
 
             var concurrentDictionary = new ConcurrentDictionary<int, string>();
             var threads = Enumerable.Range(0, 3)
-                .Select(i => new Thread(() => {
+                .Select(i => new Thread(() =>
+                {
                     foreach (var item in itemsToInitialize)
-                    {
-                        concurrentDictionary.AddOrUpdate(item, getItem, (_, s) => s);
+                    {  while(_isBusyUpdating)
+                        {
+                            Thread.Sleep(10);
+                        }
+                         _isBusyUpdating = true;
+                        if(!concurrentDictionary.ContainsKey(item))
+                        {
+                            concurrentDictionary.AddOrUpdate(item, getItem, (_, s) => s);
+                        }
+                        _isBusyUpdating = false;
                     }
                 }))
                 .ToList();
